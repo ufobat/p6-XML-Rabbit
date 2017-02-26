@@ -30,6 +30,7 @@ my class X::XmlRabbitNodeException is Exception {
 
 my role XmlRabbitAttributeHOW {
     use XML;
+
     method compose(Mu \type) {
         for type.^attributes.grep(XmlRabbitAttribute) -> $attr {
             my $method-name = $attr.name.substr(2);
@@ -59,7 +60,17 @@ my role XmlRabbitAttributeHOW {
                             X::XmlRabbitNodeException.new(message => "This Class doesn't have an XML Xpath Expression").throw();
                         }
                         $val = self.xpath.find($attr.xpath-expression, start => self.context);
-                        $val = $val ~~ XML::Node ?? join '', $val.contents>>.text !! $val;
+                        my &convert-node = sub ($val is rw) {
+                            $val = $val ~~ XML::Node ?? join '', $val.contents>>.text !! $val;
+                        };
+
+                        if $val ~~ Array {
+                            for $val.values {
+                                &convert-node($_);
+                            }
+                        } else {
+                            &convert-node($val);
+                        }
                         $attr.set_value( self, $val );
                     }
                     return $val;
@@ -67,6 +78,8 @@ my role XmlRabbitAttributeHOW {
         }
         callsame;
     }
+
+
 }
 
 multi trait_mod:<is>(Attribute:D $attr, :$xpath! ) is export {
