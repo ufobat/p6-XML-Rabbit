@@ -17,7 +17,8 @@ our role XML::Rabbit::Node {
 }
 
 my role XmlRabbitAttribute {
-    has $.xpath-expression is rw;
+    has Str $.xpath-expression is rw;
+    has Str $.xpath-key-expression is rw;
 }
 
 my class X::Usage is Exception {
@@ -59,17 +60,28 @@ my role XmlRabbitAttributeHOW {
                         unless self.xpath.defined {
                             X::XmlRabbitNodeException.new(message => "This Class doesn't have an XML Xpath Expression").throw();
                         }
-                        $val = self.xpath.find($attr.xpath-expression, start => self.context);
-                        my &convert-node = sub ($val is rw) {
-                            $val = $val ~~ XML::Node ?? join '', $val.contents>>.text !! $val;
+                        my &convert-node = sub ($val) {
+                            return $val ~~ XML::Node ?? join '', $val.contents>>.text !! $val;
                         };
 
-                        if $val ~~ Array {
-                            for $val.values {
-                                &convert-node($_);
+                        my $values = self.xpath.find($attr.xpath-expression, start => self.context);
+                        my $keys   = $attr.xpath-key-expression.defined
+                        ?? self.xpath.find($attr.xpath-key-expression, start => self.context)
+                        !! Str:U;
+
+                        for ($values, $keys) {
+                            if $_ ~~ Array {
+                                for $_.values {
+                                    $_ = &convert-node($_);
+                                }
+                            } else {
+                                $_ = &convert-node($_);
                             }
+                        }
+                        if $keys.defined {
+                            $val{ $keys.values } = $values.values;
                         } else {
-                            &convert-node($val);
+                            $val = $values;
                         }
                         $attr.set_value( self, $val );
                     }
@@ -85,8 +97,14 @@ my role XmlRabbitAttributeHOW {
 multi trait_mod:<is>(Attribute:D $attr, :$xpath! ) is export {
     my $class := $attr.package;
     $attr does XmlRabbitAttribute;
-    $attr.xpath-expression = $xpath;
-
+    if $xpath ~~ Pair {
+        $attr.xpath-key-expression = $xpath.key;
+        $attr.xpath-expression     = $xpath.value;
+    } elsif $xpath ~~ Str {
+        $attr.xpath-expression = $xpath;
+    } else {
+        X::Usage.new(message => "invalid 'is xpath(...)' expression").throw();
+    }
     unless $class.HOW ~~ XmlRabbitAttributeHOW {
         $class.HOW does XmlRabbitAttributeHOW
     }
