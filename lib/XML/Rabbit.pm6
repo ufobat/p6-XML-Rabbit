@@ -19,6 +19,7 @@ our role XML::Rabbit::Node {
 my role XmlRabbitAttribute {
     has Str $.xpath-expression is rw;
     has Str $.xpath-key-expression is rw;
+    has Str $.xpath-class-name is rw;
 }
 
 my class X::Usage is Exception {
@@ -55,13 +56,35 @@ my role XmlRabbitAttributeHOW {
                     my $val = $attr.get_value( self );
                     unless $val.defined {
                         unless self.context.defined {
-                            X::XmlRabbitNodeException.new(message => "This Class doesn't have an XML Context.").throw();
+                            X::XmlRabbitNodeException.new(message => "This Class doesn't have an XML Context").throw();
                         }
                         unless self.xpath.defined {
                             X::XmlRabbitNodeException.new(message => "This Class doesn't have an XML Xpath Expression").throw();
                         }
-                        my &convert-node = sub ($val) {
+                        my &convert-node-to-text = sub ($val) {
                             return $val ~~ XML::Node ?? join '', $val.contents>>.text !! $val;
+                        };
+                        my &convert-node-to-rabbit = sub ($val) {
+                            unless $val ~~ XML::Node {
+                                X::XmlRabbitNodeException.new(
+                                    message => "The xpath expression {$attr.xpath-expression} must return a XML::Node in order create a XML::Rabbit::Node"
+                                ).throw();
+                            }
+                            my $object      = ::($attr.xpath-class-name).new();
+                            $object.xpath   = self.xpath;
+                            $object.context = $val;
+                            return $object;
+                        }
+
+                        my &result-converter = sub ($result is rw, &node-converter) {
+                            if $result ~~ Array {
+                                for $result.values {
+                                    $_ = &node-converter($_);
+                                }
+                            } else {
+                                $result = &node-converter($result);
+                            }
+                            return $result;
                         };
 
                         my $values = self.xpath.find($attr.xpath-expression, start => self.context);
@@ -69,15 +92,21 @@ my role XmlRabbitAttributeHOW {
                         ?? self.xpath.find($attr.xpath-key-expression, start => self.context)
                         !! Str:U;
 
-                        for ($values, $keys) {
-                            if $_ ~~ Array {
-                                for $_.values {
-                                    $_ = &convert-node($_);
-                                }
-                            } else {
-                                $_ = &convert-node($_);
-                            }
-                        }
+                        $values = &result-converter($values,
+                                                    $attr.xpath-class-name
+                                                     ?? &convert-node-to-rabbit
+                                                     !! &convert-node-to-text);
+                        $keys = &result-converter($keys, &convert-node-to-text);
+
+                        # for ($values, $keys) {
+                        #     if $_ ~~ Array {
+                        #         for $_.values {
+                        #             $_ = &node-converter($_);
+                        #         }
+                        #     } else {
+                        #         $_ = &node-converter($_);
+                        #     }
+                        # }
                         if $keys.defined {
                             $val{ $keys.values } = $values.values;
                         } else {
@@ -90,18 +119,38 @@ my role XmlRabbitAttributeHOW {
         }
         callsame;
     }
+}
 
-
+multi trait_mod:<is>(Attribute:D $attr, :$xpath-object!) is export {
+    my $class := $attr.package;
+    $attr does XmlRabbitAttribute;
+    if $xpath-object ~~ List && $xpath-object.elems == 2 && $xpath-object[1] ~~ Pair {
+        $attr.xpath-class-name     = $xpath-object[0];
+        $attr.xpath-key-expression = $xpath-object[1].key;
+        $attr.xpath-expression     = $xpath-object[1].value;
+    } elsif $xpath-object ~~ List && $xpath-object.elems == 2 && $xpath-object[1] ~~ Str {
+        $attr.xpath-class-name     = $xpath-object[0];
+        $attr.xpath-expression     = $xpath-object[1];
+        $attr.xpath-key-expression = Nil;
+    } else {
+        X::Usage.new(message => "invalid 'is xpath-object(...)' expression. Expecting 'is xpath-object('Your::Object', '/xpath/expression')' or similar").throw();
+    }
+    unless $class.HOW ~~ XmlRabbitAttributeHOW {
+        $class.HOW does XmlRabbitAttributeHOW
+    }
 }
 
 multi trait_mod:<is>(Attribute:D $attr, :$xpath! ) is export {
     my $class := $attr.package;
     $attr does XmlRabbitAttribute;
     if $xpath ~~ Pair {
+        $attr.xpath-class-name     = Nil;
         $attr.xpath-key-expression = $xpath.key;
         $attr.xpath-expression     = $xpath.value;
     } elsif $xpath ~~ Str {
-        $attr.xpath-expression = $xpath;
+        $attr.xpath-class-name     = Nil;
+        $attr.xpath-expression     = $xpath;
+        $attr.xpath-key-expression = Nil;
     } else {
         X::Usage.new(message => "invalid 'is xpath(...)' expression").throw();
     }
