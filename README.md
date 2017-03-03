@@ -1,5 +1,7 @@
 # XML::Rabbit
 
+[![Build Status](https://travis-ci.org/ufobat/p6-XML-Rabbit.png)](https://travis-ci.org/ufobat/p6-XML-Rabbit)
+
 A Perl 6 Library for building Attribues from XML files with xpath Expressions.
 
 # XPath Specification
