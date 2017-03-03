@@ -2,7 +2,7 @@ use v6.c;
 use Test;
 use XML::Rabbit;
 
-plan 3;
+plan 8;
 
 class TestMe does XML::Rabbit::Node {
     has $.x is xpath-object('TestB', '/xml/b');
