@@ -31,7 +31,7 @@ If you want to see more examples please have a look at the [testcases](t).
 
 # Documentation
 
-
+This is my attempt to bring the ideas of [perl5 XML::Rabbit](https://metacpan.org/pod/XML::Rabbit) into perl6. Thanks to [AttrX::Lazy](https://github.com/pierre-vigier/Perl6-AttrX-Lazy) where I got the blueprint how to do the Meta programming.
 
 # License
 
